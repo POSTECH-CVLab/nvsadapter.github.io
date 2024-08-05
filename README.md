@@ -161,6 +161,21 @@ python3 launch.py --config configs/nvsadapter.yaml --train --gpu 0 data.image_pa
 
 You can find the results in `3drec/outputs`.
 
+## LoRA Injection
+
+We can also combine our model with LoRA models to inject specific styles on generated images. 
+Follow the step below to download LoRA models and inject it into our model.
+
+1. Search for your LoRA models in that are publicly available such as [civitai](https://civitai.com/tag/lora).
+2. Convert the LoRA model to a Diffuser-like format using `scripts/convert_lora_safetensor_to_diffusers.py` .
+3. Convert the Diffuer-like format to our format using `scripts/conver_diffusers_to_original_stalbe_diffusion.py`
+4. Run the script below
+```
+python3 scripts/novel_view_sampling.py --config_path configs/base_sd15.yaml --ckpt_path [path to our model] --use_ema --cfg_scale 11.0 --input_image_path [path to image] -n [store name] --elevation 0 0 0 0 --azimuths 72 144 216 288 --prompt "" -c [LoRA config path] --seed $SEED
+```
+5. Be sure your LoRA model is trained with the same version with our backbone SD model. 
+
+
 ## Licence
 
 This project including the codes is distributed under the [MIT License](LICENSE-CODE), equivalent version of [Generative Models by Stability AI](https://github.com/Stability-AI/generative-models/blob/main/LICENSE-CODE), 

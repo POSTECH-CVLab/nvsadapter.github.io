@@ -1,5 +1,6 @@
 import argparse
 from pathlib import Path
+import os
 
 import pytorch_lightning as pl
 from omegaconf import OmegaConf
@@ -43,10 +44,10 @@ def evaluate(args):
     else:
         cfg_scale = model_config.params.sampler_config.params.guider_config.params.scale
 
-    dirname = f"{name}_step_{ckpt_step}_cfg_scale_{cfg_scale}_use_ema_{args.use_ema}_seed_{args.seed}"
+    dirname = f"{name}_cfg_scale_{cfg_scale}_use_ema_{args.use_ema}_seed_{args.seed}"
     if args.split_idx is not None:
         dirname = dirname + "_" + f"{args.split_idx}"
-    
+
     save_dir = save_dir.joinpath(dirname)
     save_dir.mkdir(exist_ok=True)
 
@@ -56,7 +57,7 @@ def evaluate(args):
     datamodule = DirDataModule(
         ds_root_path=args.ds_root_path,
         ds_list_json_path=args.ds_list_json_path,
-        num_total_views=args.num_total_views,
+        num_total_views=args.ds_num_total_views,
         batch_size=args.batch_size,
         num_workers=data_config.params.num_workers,
         resolution=data_config.params.val_config.resolution,

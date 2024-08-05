@@ -165,3 +165,7 @@ class MiDaSInference(nn.Module):
         assert prediction.shape == (x.shape[0], 1, x.shape[2], x.shape[3])
         return prediction
 
+    def forward_each(self, img):
+        torch_img = img.float().unsqueeze(0)
+        prediction = self.forward(torch_img)
+        return prediction.squeeze().cpu().numpy()

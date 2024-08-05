@@ -78,10 +78,9 @@ model:
                   input_keys: 
                     - support_rgbs_cond
                     - query_rgbs_cond
-                  target: sgm.modules.nvsadapter.conditioner.MiDASDepthConditioner
-                  params:
-                    model_type: dpt_hybrid
+                  target: sgm.modules.nvsadapter.conditioner.CannyConditioner
 
     # path to the pre-trained SD model checkpoint
     sd_ckpt_path: checkpoints/v1-5-pruned-emaonly.ckpt
-    controlnet_ckpt_path: checkpoints/control_sd15_depth.pth
+    controlnet_ckpt_path: checkpoints/control_sd15_canny.pth
+    ckpt_path: checkpoints/4query_sd_15_last.ckpt

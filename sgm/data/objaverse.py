@@ -98,7 +98,7 @@ class ObjaverseDataLoader(LightningDataModule):
         
         if stage == "test" or stage is None:
             self.test_dataset = create_dataset(self.test_config.urls, self.test_config.length, self.batch_size,
-                                               True, "val", self.test_postprocess_fn, world_size, force_no_shuffle=True)
+                                               False, "val", self.test_postprocess_fn, world_size, force_no_shuffle=True)
 
     def postprocess_fn(self, sample: Dict, config: DictConfig) -> Union[Dict, None]:
 
@@ -112,7 +112,7 @@ class ObjaverseDataLoader(LightningDataModule):
 
         if self.load_all_views:
             indices = np.concatenate([np.array([0], dtype=np.int32), np.arange(config.total_views-1, dtype=np.int32) + 1])
-            num_views_each = (num_views_each[0], config.total_views)
+            num_views_each = (num_views_each[0], config.total_views-1)
         elif not config.deterministic:
             # training
             indices = np.random.choice(config.total_views, num_selected_views, replace=False)

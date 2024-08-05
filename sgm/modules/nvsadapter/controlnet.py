@@ -265,3 +265,27 @@ class ControlNet(nn.Module):
         outs.append(self.middle_block_out(h, emb, context))
 
         return outs
+
+
+class ControlNets(nn.Module):
+    
+    def __init__(self, num_controlnets, **kwargs): 
+        super().__init__()
+        self.controlnets = nn.ModuleList([ControlNet(**kwargs) for _ in range(num_controlnets)])
+
+    def forward(self, x, hint, timesteps, context, **kwargs): 
+        ret = []
+        for idx, controlnet in enumerate(self.controlnets):
+            hint_curr = hint[:, 3 * idx: 3 * (idx + 1)]
+            ret.append(controlnet(x, hint_curr, timesteps, context, **kwargs))
+
+        num_components, num_conditions = len(ret[0]), len(ret)
+
+        sum_ret = []
+        for component_idx in range(num_components):
+            temp_ret = []
+            for i in range(num_conditions):
+                temp_ret.append(ret[i][component_idx])
+            sum_ret.append(torch.mean(torch.stack(temp_ret), dim=0))
+
+        return sum_ret

@@ -1,6 +1,8 @@
 from typing import Any, Dict, List, Union, Tuple
 from omegaconf import ListConfig, OmegaConf
 import json
+from pathlib import Path
+import gc
 
 import math
 import torch
@@ -8,14 +10,13 @@ from einops import rearrange
 from safetensors.torch import load_file as load_safetensors
 from torchvision.transforms import ToPILImage
 from torch.optim.lr_scheduler import LambdaLR
-from piqa.ssim import SSIM
-from piqa.lpips import LPIPS
-from piqa.psnr import PSNR
 
 from sgm.geometry import get_rays
 from sgm.models.diffusion import DiffusionEngine
 from sgm.modules.ema import LitEma
 from sgm.util import instantiate_from_config
+from sgm.modules.nvsadapter.lora.utils import *
+from sgm.modules.nvsadapter.lora.lora import inject_trainable_lora
 
 
 class NVSAdapterDiffusionEngine(DiffusionEngine):
@@ -34,6 +35,7 @@ class NVSAdapterDiffusionEngine(DiffusionEngine):
         ckpt_path: str | None = None, 
         sd_ckpt_path: str | None = None, # path to the pre-trained SD model.
         controlnet_ckpt_path: str | None = None, # path to the pre-trained controlnet model.
+        lora_ckpt_path: str | None = None, # path to the lora model.
         use_ema: bool = False, 
         ema_decay_rate: float = 0.9999, 
         scale_factor: float = 1, 
@@ -75,7 +77,7 @@ class NVSAdapterDiffusionEngine(DiffusionEngine):
 
         if sd_ckpt_path is not None:
             print(f"Loaded SD from {sd_ckpt_path}")
-            self.init_from_pretrained_sd(sd_ckpt_path, use_ema)
+            self.init_from_pretrained_sd(sd_ckpt_path)
 
         self.use_ema = use_ema
         if self.use_ema:
@@ -94,6 +96,12 @@ class NVSAdapterDiffusionEngine(DiffusionEngine):
         if controlnet_ckpt_path is not None:
             print(f"Loaded controlnet ckpt from {controlnet_ckpt_path}")
             self.load_controlnet_ckpt(controlnet_ckpt_path)
+
+        if lora_ckpt_path is not None:
+            print(f"Loaded lora ckpt from {lora_ckpt_path}")
+            self.init_from_pretrained_sd(lora_ckpt_path, loading_lora=True)
+
+
 
     def named_parameters(self, prefix: str = '', recurse: bool = True, remove_duplicate: bool = True):
         for name, param in super().named_parameters(prefix, recurse, remove_duplicate):
@@ -204,11 +212,8 @@ class NVSAdapterDiffusionEngine(DiffusionEngine):
                 ret_batch[key] = batch[key][:, indices_batch]
         return ret_batch
     
-    def on_test_start(self) -> None:
-        self.psnr = PSNR(reduction="none").to(self.device)
-        self.ssim = SSIM(reduction="none").to(self.device)
-        self.lpips = LPIPS(reduction="none", network="vgg").to(self.device)
 
+    @torch.inference_mode()
     def test_step(self, batch, batch_idx, *args, **kwargs):
         num_total_views = batch["query_rgbs"].shape[1]
         num_query_views = self.model.diffusion_model.num_query
@@ -224,8 +229,8 @@ class NVSAdapterDiffusionEngine(DiffusionEngine):
             x = self.get_input(curr_batch)
             x_latent = self.encode_first_stage(x)
             c, uc = self.conditioner.get_unconditional_conditioning(curr_batch)
-            with self.ema_scope("Plotting"):
-                samples = self.sample(c, uc, batch_size=x_latent.shape[0], shape=x_latent.shape[1:])
+            # with self.ema_scope("Plotting"):
+            samples = self.sample(c, uc, batch_size=x_latent.shape[0], shape=x_latent.shape[1:])
             
             samples = ((self.decode_first_stage(samples) + 1) / 2.).clamp(0, 1)
             support_rgbs = ((curr_batch["support_rgbs"] + 1) / 2.).clamp(0, 1)
@@ -243,45 +248,27 @@ class NVSAdapterDiffusionEngine(DiffusionEngine):
             tensor_grid = torch.cat([support_rgbs_viz, query_rgbs_viz, samples_viz], dim=-1)
 
             viz = ToPILImage()(tensor_grid)
-            viz.save(self.save_dir.joinpath(f"batch_{batch_idx}_query_{query_idx}_rank_{self.global_rank}.png"))
+            save_dir = self.save_dir if hasattr(self, "save_dir") else Path(self.trainer.log_dir)
+            viz.save(save_dir.joinpath(f"batch_{batch_idx}_query_{query_idx}_rank_{self.global_rank}.png"))
+            
+            curr_batch_keys = list(curr_batch.keys())
+            for key in curr_batch_keys:
+                del curr_batch[key]
 
-            samples_flatten = rearrange(samples, "b n c h w -> (b n) c h w")
-            query_rgbs_flatten = rearrange(query_rgbs, "b n c h w -> (b n) c h w")
+        batch_keys = list(batch.keys())
+        for key in batch_keys:
+            del batch[key]
 
-            self.test_step_outputs["psnr"].append(self.psnr(samples_flatten, query_rgbs_flatten))
-            self.test_step_outputs["ssim"].append(self.ssim(samples_flatten, query_rgbs_flatten))
-            self.test_step_outputs["lpips"].append(self.lpips(samples_flatten, query_rgbs_flatten))
 
-    def on_test_epoch_end(self) -> None:
+        c_keys = list(c.keys())
+        for key in c_keys:
+            del c[key], uc[key]
 
-        psnr_cat = torch.cat(self.test_step_outputs["psnr"])
-        ssim_cat = torch.cat(self.test_step_outputs["ssim"])
-        lpips_cat = torch.cat(self.test_step_outputs["lpips"])
+        del tensor_grid, viz, samples, support_rgbs, query_rgbs, samples_viz, support_rgbs_viz, query_rgbs_viz, x, x_latent, c, uc, curr_batch, mask, indices
+        gc.collect()
+        torch.cuda.empty_cache()
 
-        psnr = psnr_cat.mean()
-        ssim = ssim_cat.mean()
-        lpips = lpips_cat.mean()
-
-        with open(self.save_dir.joinpath("test_metrics.txt"), "w") as f:
-            f.write(f"PSNR: {psnr}\n")
-            f.write(f"SSIM: {ssim}\n")
-            f.write(f"LPIPS: {lpips}\n")
-
-        with open(self.save_dir.joinpath("psnr.json"), "w") as f:
-            json.dump(psnr_cat.tolist(), f)
-
-        with open(self.save_dir.joinpath("ssim.json"), "w") as f:
-            json.dump(ssim_cat.tolist(), f)
-        
-        with open(self.save_dir.joinpath("lpips.json"), "w") as f:
-            json.dump(lpips_cat.tolist(), f)
-
-        self.test_step_outputs["psnr"].clear()
-        self.test_step_outputs["ssim"].clear()
-        self.test_step_outputs["lpips"].clear()
-        return super().on_test_epoch_end()
-
-    def init_from_pretrained_sd(self, sd_path: str, use_ema: bool) -> None:
+    def init_from_pretrained_sd(self, sd_path: str, loading_lora=False) -> None:
         # similar to the init_from_ckpt but load pre-trained SD model only (not whole NVS model).
         if sd_path.endswith("ckpt"):
             sd = torch.load(sd_path, map_location="cpu")["state_dict"]
@@ -294,8 +281,13 @@ class NVSAdapterDiffusionEngine(DiffusionEngine):
             if key.startswith("model.diffusion_model"):
                 sd[key.replace("model.diffusion_model", "model.diffusion_model.unet")] = sd.pop(key)
                 
-        missing, unexpected = self.load_state_dict(sd, strict=False)
+        if loading_lora:
+            for key in list(sd.keys()):
+                if key.startswith("cond_stage_model"):
+                    sd[key.replace("cond_stage_model", "conditioner.conditioners.2.embedders.0")] = sd.pop(key)
+            
 
+        missing, unexpected = self.load_state_dict(sd, strict=False)
         # # For checking whether the loaded weights are correct.
         # missing = [k for k in missing if not "image_attn_module" in k and not "transformer_blocks" in k]
         # missing = [k for k in missing if not "cross_view_attn_module" in k and not "transformer_blocks" in k]
@@ -306,11 +298,20 @@ class NVSAdapterDiffusionEngine(DiffusionEngine):
         # unexpected = [k for k in unexpected if not k.startswith("cond_stage_model.")] 
 
     def load_controlnet_ckpt(self, ckpt_path):
-        sd = torch.load(ckpt_path)
-        sd_prefix = "control_model."
-        model_prefix = "model.diffusion_model.control_model."
-        controlnet_sd = {k.replace(sd_prefix, model_prefix): v for k, v in sd.items() if k.startswith("control_model.")}
-        missing, unexpected = self.load_state_dict(controlnet_sd, strict=False)
+
+        if isinstance(ckpt_path, str):
+            sd = torch.load(ckpt_path)
+            sd_prefix = "control_model."
+            model_prefix = "model.diffusion_model.control_model."
+            controlnet_sd = {k.replace(sd_prefix, model_prefix): v for k, v in sd.items() if k.startswith("control_model.")}
+            missing, unexpected = self.load_state_dict(controlnet_sd, strict=False)
+        else:
+            for (idx, pth) in enumerate(ckpt_path):
+                sd = torch.load(pth)
+                sd_prefix = "control_model."
+                model_prefix = f"model.diffusion_model.control_model.controlnets.{idx}."
+                controlnet_sd = {k.replace(sd_prefix, model_prefix): v for k, v in sd.items() if k.startswith("control_model.")}
+                missing, unexpected = self.load_state_dict(controlnet_sd, strict=False)
     
     @torch.inference_mode()
     def sample(
@@ -377,10 +378,10 @@ class NVSAdapterDiffusionEngine(DiffusionEngine):
                     c, shape=z.shape[1:], uc=uc, batch_size=N, with_cfg=True, **sampling_kwargs
                 )
             cfg_samples = self.decode_first_stage(cfg_samples)
-            with self.ema_scope("Plotting"):
-                non_cfg_samples = self.sample(
-                    c, shape=z.shape[1:], uc=uc, batch_size=N, with_cfg=False, **sampling_kwargs
-                )
+            # with self.ema_scope("Plotting"):
+            non_cfg_samples = self.sample(
+                c, shape=z.shape[1:], uc=uc, batch_size=N, with_cfg=False, **sampling_kwargs
+            )
             non_cfg_samples = self.decode_first_stage(non_cfg_samples)
 
             cfg_samples_viz = rearrange(cfg_samples, "b n c h w -> c (b n h) w")

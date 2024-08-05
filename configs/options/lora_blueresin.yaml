@@ -1,0 +1,3 @@
+model:
+  params:
+    lora_ckpt_path: ./checkpoints/lora_checkpoint/blueresin.ckpt

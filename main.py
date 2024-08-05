@@ -25,7 +25,7 @@ from pytorch_lightning.utilities import rank_zero_only
 
 from sgm.util import exists, instantiate_from_config, isheatmap
 
-MULTINODE_HACKS = True
+MULTINODE_HACKS = False
 
 
 def default_trainer_args():

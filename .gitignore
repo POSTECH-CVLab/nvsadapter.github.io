@@ -13,3 +13,15 @@
 /build
 /src
 .ipynb_checkpoints
+
+logs/
+logs_viz/
+logs_sampling/
+lightning_logs/
+logs_sampling_control
+notebooks/*
+
+sample/*
+bash_scripts/*
+data/*
+.vscode/*
