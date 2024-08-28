@@ -64,6 +64,11 @@
   <div class="container">
     <div class="row">
       <div class="col-12 text-center">
+        <h3>Announcement</h3>
+        Our paper is updated to the ECCV format! Please checkout the recent version!
+        <br>
+        <br>
+
         <h3>TL;DR</h3>
 
         <p class="text-center">
@@ -76,26 +81,56 @@
         <br>
 
         <br>
-        <h3>Abstract</h3>
+        <h3>Abstract</h3> 
 
         <p class="text-left">
-          Transfer learning of large-scale Text-to-Image (T2I) models has recently shown impressive potential for Novel
-          View Synthesis (NVS) of diverse objects from a single image. While previous methods typically train large
-          models on multi-view datasets for NVS, fine-tuning the whole parameters of T2I models not only demands a high
-          cost but also reduces the generalization capacity of T2I models in generating diverse images in a new domain.
-          In this study, we propose an effective method, dubbed NVS-Adapter, which is a plug-and-play module for a T2I
-          model, to synthesize novel multi-views of visual objects while fully exploiting the generalization capacity of
-          T2I models. NVS-Adapter consists of two main components; view-consistency cross-attention learns the visual
-          correspondences to align the local details of view features, and global semantic conditioning aligns the
-          semantic structure of generated views with the reference view. Experimental results demonstrate that the
-          NVS-Adapter can effectively synthesize geometrically consistent multi-views and also achieve high performance
-          on benchmarks without full fine-tuning of T2I models.
+          Transfer learning of large-scale Text-to-Image (T2I) models has recently shown impressive potential for Novel View Synthesis (NVS) of diverse objects from a single image. While previous methods typically train large models on multi-view datasets for NVS, fine-tuning the whole parameters of T2I models not only demands a high cost but also reduces the generalization capacity of T2I models in generating diverse images in a new domain. In this study, we propose an effective method, dubbed NVS-Adapter, which is a plug-and-play module for a T2I model, to synthesize novel multi-views of visual objects while fully exploiting the generalization capacity of T2I models. NVS-Adapter consists of two main components; view-consistency cross-attention learns the visual correspondences to align the local details of view features, and global semantic conditioning aligns the semantic structure of generated views with the reference view. Experimental results demonstrate that the NVS-Adapter can effectively synthesize geometrically consistent multi-views and also achieve high performance on benchmarks without full fine-tuning of T2I models. 
         </p>
 
 
         <img src="images/main_framework.png" width="1000">
         <br>
 
+      </div>
+    </div>
+  </div>
+</section>
+<br>
+
+<section>
+  <div class="container">
+    <div class="row">
+      <div class="col-12 text-center">
+        <h2>Compatibility with ControlNet</h2>
+        <p class="text-center">
+          Our NVS-Adapter is fully compatible with ControlNets without any additional training.
+        </p>
+        <hr style="margin-top:0px">
+        <img src="images/controlnet.png" width="1000">
+        <br>
+        <p class="text-left">
+
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+<br>
+
+<section>
+  <div class="container">
+    <div class="row">
+      <div class="col-12 text-center">
+        <h2>Compatibility with LoRA</h2>
+        <p class="text-center">
+          Our NVS-Adapter is also fully compatible with LoRA modules without any additional training.
+        </p>
+        <hr style="margin-top:0px">
+        <img src="images/lora.png" width="1000">
+        <br>
+        <p class="text-left">
+
+        </p>
       </div>
     </div>
   </div>
@@ -186,9 +221,10 @@
       <pre style="background-color: #e9eeef;padding: 1.25em 1.5em">
 <code>@article{jeong2023nvsadapter,
     title={NVS-Adapter: Plug-and-Play Novel View Synthesis from a Single Image},
+    booktitle={Computer Vision -- ECCV 2024},
+    publisher={Springer Nature Switzerland},
     author={Yoonwoo Jeong, Jinwoo Lee, Chiheon Kim, Minsu Cho, and Doyup Lee},
-    journal={arXiv preprint arXiv:2309.03453},
-    year={2023}
+    year={2024}
 }</code>
               </pre>
       <hr>
